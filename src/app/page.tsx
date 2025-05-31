@@ -181,7 +181,7 @@ export default function HomePage() {
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => router.push("/translator")}>
+          {/* <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => router.push("/translator")}>
             <CardHeader className="text-center">
               <div className="mx-auto mb-4 p-3 bg-green-100 rounded-full w-fit">
                 <Languages className="h-8 w-8 text-green-600" />
@@ -202,7 +202,7 @@ export default function HomePage() {
                 Get Started
               </Button>
             </CardContent>
-          </Card>
+          </Card> */}
         </div>
 
         {router.pathname === "/text-splitter" && (
