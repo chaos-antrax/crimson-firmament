@@ -205,7 +205,7 @@ export default function HomePage() {
           </Card> */}
         </div>
 
-        {router.pathname === "/text-splitter" && (
+        {/* {router.pathname === "/text-splitter" && (
           <div className="container mx-auto py-8 px-4 mt-8">
             <h2 className="text-3xl font-bold mb-6 text-center">Text Splitter</h2>
 
@@ -289,7 +289,7 @@ export default function HomePage() {
               onNavigate={navigateToResult}
             />
           </div>
-        )}
+        )} */}
       </div>
     </div>
   )
