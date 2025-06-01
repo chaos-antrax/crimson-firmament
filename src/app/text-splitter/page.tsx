@@ -69,7 +69,7 @@ export default function TextSplitter() {
     navigator.clipboard.writeText(text)
     setCopiedIndex(index)
     setTimeout(() => setCopiedIndex(null), 3000)
-    toast("Copied to clipboard", {
+    toast("Copied to clipboard",{
       description: "Text has been copied to your clipboard",
       duration: 2000,
     })
@@ -77,7 +77,7 @@ export default function TextSplitter() {
 
   const handleTranslateWithOmni = async () => {
     if (textChunks.length === 0) {
-      toast("No chunks to translate", {
+      toast( "No chunks to translate",{
         description: "Please split your text first",
       })
       return
@@ -90,7 +90,7 @@ export default function TextSplitter() {
     const newWindow = window.open(targetUrl, "_blank")
 
     if (!newWindow) {
-      toast("Popup Blocked",{
+      toast("Popup blocked",{
         description: "Please allow popups for this site and try again",
       })
       setIsProcessing(false)

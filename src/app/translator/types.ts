@@ -2,6 +2,7 @@ export interface Book {
   id: string
   title: string
   chapters: Chapter[]
+  contexts: Record<string, string> // Add book-specific contexts
   createdAt: Date
   updatedAt: Date
 }

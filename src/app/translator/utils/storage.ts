@@ -13,6 +13,7 @@ export const loadBooks = (): Book[] => {
     const books = JSON.parse(stored)
     return books.map((book: any) => ({
       ...book,
+      contexts: book.contexts || {}, // Ensure contexts field exists
       createdAt: new Date(book.createdAt),
       updatedAt: new Date(book.updatedAt),
       chapters: book.chapters.map((chapter: any) => ({
@@ -33,27 +34,5 @@ export const saveBooks = (books: Book[]): void => {
     localStorage.setItem(BOOKS_KEY, JSON.stringify(books))
   } catch (error) {
     console.error("Error saving books:", error)
-  }
-}
-
-export const loadContexts = (): Record<string, string> => {
-  if (typeof window === "undefined") return {}
-
-  try {
-    const stored = localStorage.getItem(CONTEXTS_KEY)
-    return stored ? JSON.parse(stored) : {}
-  } catch (error) {
-    console.error("Error loading contexts:", error)
-    return {}
-  }
-}
-
-export const saveContexts = (contexts: Record<string, string>): void => {
-  if (typeof window === "undefined") return
-
-  try {
-    localStorage.setItem(CONTEXTS_KEY, JSON.stringify(contexts))
-  } catch (error) {
-    console.error("Error saving contexts:", error)
   }
 }

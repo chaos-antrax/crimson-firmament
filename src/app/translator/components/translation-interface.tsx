@@ -5,18 +5,24 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Plus, Play, BookOpen } from "lucide-react"
+import { Plus, Play, BookOpen, Trash2 } from "lucide-react"
 import type { Book, Chapter, TranslationChunk } from "../types"
 import { TranslationViewer } from "./translation-viewer"
+import { toast } from "sonner"
 
 interface TranslationInterfaceProps {
   book: Book
-  contexts: Record<string, string>
   onAddChapter: (chapter: Chapter) => void
+  onDeleteChapter: (chapterId: string) => void
   onUpdateContexts: (contexts: Record<string, string>) => void
 }
 
-export function TranslationInterface({ book, contexts, onAddChapter, onUpdateContexts }: TranslationInterfaceProps) {
+export function TranslationInterface({
+  book,
+  onAddChapter,
+  onDeleteChapter,
+  onUpdateContexts,
+}: TranslationInterfaceProps) {
   const [showAddChapter, setShowAddChapter] = useState(false)
   const [chapterTitle, setChapterTitle] = useState("")
   const [chapterText, setChapterText] = useState("")
@@ -61,19 +67,12 @@ export function TranslationInterface({ book, contexts, onAddChapter, onUpdateCon
   }
 
   const translateChunk = async (text: string, contexts: Record<string, string>): Promise<string> => {
-    const contextPrompt =
-      Object.keys(contexts).length > 0
-        ? `\n\nContext for consistent translation:\n${Object.entries(contexts)
-            .map(([chinese, english]) => `${chinese} = ${english}`)
-            .join("\n")}\n\nPlease use these translations consistently for the above terms.`
-        : ""
-
     const response = await fetch("/api/translate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        text: text + contextPrompt,
-        contexts,
+        text: text,
+        contexts: contexts,
       }),
     })
 
@@ -85,25 +84,22 @@ export function TranslationInterface({ book, contexts, onAddChapter, onUpdateCon
     return data.translation
   }
 
-  const extractNewContexts = (originalText: string, translatedText: string): Record<string, string> => {
-    // Simple regex to find potential names and locations
-    // This is a basic implementation - could be enhanced with better NLP
-    const chineseNamePattern = /[一-龯]{2,4}(?=[，。！？\s]|$)/g
-    const matches = originalText.match(chineseNamePattern) || []
+  const extractTitleFromText = (text: string): string => {
+    // Get the first non-empty line
+    const lines = text.split("\n").filter((line) => line.trim().length > 0)
+    if (lines.length === 0) return ""
 
-    const newContexts: Record<string, string> = {}
+    let title = lines[0].trim()
 
-    // This is a simplified approach - in a real implementation,
-    // you'd want more sophisticated name/location detection
-    matches.forEach((match) => {
-      if (!contexts[match] && match.length >= 2) {
-        // For demo purposes, we'll just mark these as needing translation
-        // In practice, you'd extract from the translated text
-        newContexts[match] = `[${match}]` // Placeholder
-      }
-    })
+    // If the title is too long, truncate it
+    if (title.length > 100) {
+      title = title.substring(0, 97) + "..."
+    }
 
-    return newContexts
+    // Remove any common chapter prefixes
+    title = title.replace(/^(chapter|section|part)\s+\d+\s*[:.-]?\s*/i, "")
+
+    return title
   }
 
   const handleStartTranslation = async () => {
@@ -122,54 +118,97 @@ export function TranslationInterface({ book, contexts, onAddChapter, onUpdateCon
     setTranslationChunks(initialChunks)
 
     let fullTranslation = ""
-    let updatedContexts = { ...contexts }
+    let finalChunkTranslation = ""
 
-    for (let i = 0; i < chunks.length; i++) {
-      setTranslationChunks((prev) => prev.map((chunk, idx) => (idx === i ? { ...chunk, isTranslating: true } : chunk)))
-
-      try {
-        const translation = await translateChunk(chunks[i], updatedContexts)
-        fullTranslation += (i > 0 ? "\n\n" : "") + translation
-
-        // Extract new contexts from this chunk
-        const newContexts = extractNewContexts(chunks[i], translation)
-        updatedContexts = { ...updatedContexts, ...newContexts }
-
+    try {
+      for (let i = 0; i < chunks.length; i++) {
+        // Update current chunk status to translating
         setTranslationChunks((prev) =>
-          prev.map((chunk, idx) =>
-            idx === i ? { ...chunk, translatedText: translation, isTranslating: false } : chunk,
-          ),
+          prev.map((chunk, idx) => (idx === i ? { ...chunk, isTranslating: true } : chunk)),
         )
-      } catch (error) {
-        console.error("Translation error:", error)
-        setTranslationChunks((prev) =>
-          prev.map((chunk, idx) =>
-            idx === i ? { ...chunk, translatedText: "Translation failed", isTranslating: false } : chunk,
-          ),
-        )
+
+        try {
+          const translation = await translateChunk(chunks[i], book.contexts)
+
+          // Clean up the translation to remove any conversational responses
+          const cleanedTranslation = translation
+            .replace(/^.*?(?:I will|I'll).*?(?:context|translation).*?\n*/gi, "")
+            .replace(/^.*?(?:Here is|Here's).*?translation.*?\n*/gi, "")
+            .replace(/^.*?(?:Using|Based on).*?context.*?\n*/gi, "")
+            .trim()
+
+          // Ensure proper paragraph spacing
+          const formattedTranslation = cleanedTranslation
+            .replace(/\n{3,}/g, "\n\n") // Replace multiple newlines with double newlines
+            .replace(/([.!?])\s*\n\s*([A-Z])/g, "$1\n\n$2") // Add spacing between sentences that start new paragraphs
+
+          fullTranslation += (i > 0 ? "\n\n" : "") + formattedTranslation
+
+          // Store the last chunk's translation for title extraction
+          if (i === chunks.length - 1) {
+            finalChunkTranslation = formattedTranslation
+          }
+
+          // Update chunk with translation
+          setTranslationChunks((prev) =>
+            prev.map((chunk, idx) =>
+              idx === i ? { ...chunk, translatedText: formattedTranslation, isTranslating: false } : chunk,
+            ),
+          )
+        } catch (error) {
+          console.error(`Translation error for chunk ${i + 1}:`, error)
+          const errorMessage = `Translation failed for chunk ${i + 1}`
+
+          setTranslationChunks((prev) =>
+            prev.map((chunk, idx) =>
+              idx === i ? { ...chunk, translatedText: errorMessage, isTranslating: false } : chunk,
+            ),
+          )
+
+          fullTranslation += (i > 0 ? "\n\n" : "") + errorMessage
+        }
       }
-    }
 
-    // Update contexts if new ones were found
-    if (Object.keys(updatedContexts).length > Object.keys(contexts).length) {
-      onUpdateContexts(updatedContexts)
-    }
+      // Extract title from the first line of the final chunk
+      const extractedTitle = extractTitleFromText(finalChunkTranslation)
 
-    // Save the completed chapter
-    const newChapter: Chapter = {
-      id: Date.now().toString(),
-      title: chapterTitle,
-      originalText: chapterText,
-      translatedText: fullTranslation,
-      createdAt: new Date(),
-    }
+      // Use extracted title if available, otherwise use the user-provided title
+      const finalTitle = extractedTitle || chapterTitle
 
-    onAddChapter(newChapter)
-    setIsTranslating(false)
-    setShowAddChapter(false)
-    setChapterTitle("")
-    setChapterText("")
-    setTranslationChunks([])
+      // Save the completed chapter
+      const newChapter: Chapter = {
+        id: Date.now().toString(),
+        title: finalTitle,
+        originalText: chapterText,
+        translatedText: fullTranslation,
+        createdAt: new Date(),
+      }
+
+      onAddChapter(newChapter)
+
+      // Reset the form
+      setIsTranslating(false)
+      setShowAddChapter(false)
+      setChapterTitle("")
+      setChapterText("")
+      setTranslationChunks([])
+
+      toast("Translation completed",{
+        description: `Chapter "${finalTitle}" translated successfully in ${chunks.length} chunks`,
+      })
+    } catch (error) {
+      console.error("Translation error:", error)
+      toast("Translation failed",{
+        description: "There was an error during translation. Please try again.",
+      })
+      setIsTranslating(false)
+    }
+  }
+
+  const handleDeleteChapter = (chapterId: string, chapterTitle: string) => {
+    if (confirm(`Are you sure you want to delete "${chapterTitle}"?`)) {
+      onDeleteChapter(chapterId)
+    }
   }
 
   if (selectedChapter) {
@@ -186,13 +225,26 @@ export function TranslationInterface({ book, contexts, onAddChapter, onUpdateCon
             {book.chapters.map((chapter) => (
               <Card
                 key={chapter.id}
-                className="cursor-pointer hover:shadow-md transition-shadow"
+                className="cursor-pointer hover:shadow-md transition-shadow group"
                 onClick={() => setSelectedChapter(chapter)}
               >
                 <CardHeader>
-                  <div className="flex items-center gap-2">
-                    <BookOpen className="h-5 w-5 text-blue-600" />
-                    <CardTitle className="text-base">{chapter.title}</CardTitle>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <BookOpen className="h-5 w-5 text-blue-600" />
+                      <CardTitle className="text-base">{chapter.title}</CardTitle>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="opacity-0 group-hover:opacity-100 transition-opacity text-red-600 hover:text-red-700 p-1"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleDeleteChapter(chapter.id, chapter.title)
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </div>
                   <p className="text-sm text-muted-foreground">{chapter.createdAt.toLocaleDateString()}</p>
                 </CardHeader>
@@ -217,18 +269,35 @@ export function TranslationInterface({ book, contexts, onAddChapter, onUpdateCon
             <CardTitle>Add New Chapter</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Input placeholder="Chapter title" value={chapterTitle} onChange={(e) => setChapterTitle(e.target.value)} />
+            <Input
+              placeholder="Chapter title (optional - will be extracted from first line)"
+              value={chapterTitle}
+              onChange={(e) => setChapterTitle(e.target.value)}
+            />
+            <div className="text-xs text-muted-foreground">
+              Title will be extracted from the first line of the translated text. This field is a fallback.
+            </div>
             <Textarea
               placeholder="Paste your Chinese text here..."
               className="min-h-[200px]"
               value={chapterText}
               onChange={(e) => setChapterText(e.target.value)}
             />
-            <div className="text-sm text-muted-foreground">{chapterText.length} characters</div>
+            <div className="text-sm text-muted-foreground">
+              {chapterText.length} characters
+              {chapterText.length > 0 && (
+                <span className="ml-2">(Will be split into ~{Math.ceil(chapterText.length / 2500)} chunks)</span>
+              )}
+            </div>
+            {Object.keys(book.contexts).length > 0 && (
+              <div className="text-sm text-muted-foreground">
+                Using {Object.keys(book.contexts).length} context terms for consistent translation
+              </div>
+            )}
             <div className="flex gap-2">
               <Button
                 onClick={handleStartTranslation}
-                disabled={!chapterTitle.trim() || !chapterText.trim()}
+                disabled={!chapterText.trim()}
                 className="flex items-center gap-2"
               >
                 <Play className="h-4 w-4" />
@@ -246,7 +315,11 @@ export function TranslationInterface({ book, contexts, onAddChapter, onUpdateCon
       {isTranslating && translationChunks.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Translating: {chapterTitle}</CardTitle>
+            <CardTitle>Translating: {chapterTitle || "New Chapter"}</CardTitle>
+            <div className="text-sm text-muted-foreground">
+              Progress: {translationChunks.filter((chunk) => chunk.translatedText && !chunk.isTranslating).length} /{" "}
+              {translationChunks.length} chunks completed
+            </div>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
@@ -257,6 +330,9 @@ export function TranslationInterface({ book, contexts, onAddChapter, onUpdateCon
                     {chunk.isTranslating && <span className="text-sm text-blue-600">Translating...</span>}
                     {chunk.translatedText && !chunk.isTranslating && (
                       <span className="text-sm text-green-600">Complete</span>
+                    )}
+                    {!chunk.translatedText && !chunk.isTranslating && (
+                      <span className="text-sm text-gray-500">Waiting...</span>
                     )}
                   </div>
                   {chunk.translatedText && (

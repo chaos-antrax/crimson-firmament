@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Copy, FileText, Languages } from "lucide-react"
 import { toast } from "sonner"
-import { ProcessingModal } from "./text-splitter/components/processing-modal"
+// import { ProcessingModal } from "./components/processing-modal"
 import { useRouter } from "next/navigation"
 
 export default function HomePage() {
@@ -78,7 +78,7 @@ export default function HomePage() {
     navigator.clipboard.writeText(text)
     setCopiedIndex(index)
     setTimeout(() => setCopiedIndex(null), 3000)
-    toast("Copied to Clipboard", {
+    toast("Copied to clipboard", {
       description: "Text has been copied to your clipboard",
       duration: 2000,
     })
@@ -205,7 +205,7 @@ export default function HomePage() {
           </Card>
         </div>
 
-        {router.pathname === "/text-splitter" && (
+        {/* {router.pathname === "/text-splitter" && (
           <div className="container mx-auto py-8 px-4 mt-8">
             <h2 className="text-3xl font-bold mb-6 text-center">Text Splitter</h2>
 
@@ -289,7 +289,7 @@ export default function HomePage() {
               onNavigate={navigateToResult}
             />
           </div>
-        )}
+        )} */}
       </div>
     </div>
   )
